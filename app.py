@@ -5,7 +5,6 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib
 import matplotlib.font_manager as fm
-from matplotlib import font_manager
 
 # =========================
 # 日本語フォント
@@ -13,17 +12,17 @@ from matplotlib import font_manager
 font_path = "NotoSansJP-Regular.ttf"
 
 font_prop = None
-
 if os.path.exists(font_path):
     font_prop = fm.FontProperties(fname=font_path)
     matplotlib.rcParams["font.family"] = font_prop.get_name()
     plt.rcParams["font.family"] = font_prop.get_name()
 else:
-    st.warning("⚠ 日本語フォントが見つかりません（□になる原因）")
+    st.warning("⚠ 日本語フォントが見つかりません")
 
-matplotlib.rcParams['font.family'] = 'sans-serif'
-matplotlib.rcParams['font.sans-serif'] = [font_prop.get_name()] if font_prop else []
-
+# =========================
+# ページ設定
+# =========================
+st.set_page_config(page_title="家計簿アプリ", layout="centered")
 
 # =========================
 # ファイル設定
@@ -32,23 +31,11 @@ DATA_FILE = "kakeibo.csv"
 COLS = ["id", "日付", "項目", "金額", "カテゴリ", "タイプ"]
 
 # =========================
-# カテゴリ定義
+# カテゴリ
 # =========================
-EXPENSE_CATEGORIES = [
-    "外食費", "食材費", "交通費", "娯楽", "日用品", "その他支出"
-]
+EXPENSE_CATEGORIES = ["外食費", "食材費", "交通費", "娯楽", "日用品", "その他支出"]
+INCOME_CATEGORIES = ["給料", "ボーナス", "副業", "お小遣い", "その他収入"]
 
-INCOME_CATEGORIES = [
-    "給料", "ボーナス", "副業", "お小遣い", "その他収入"
-]
-
-ALL_CATEGORY_ORDER = list(dict.fromkeys(
-    EXPENSE_CATEGORIES + INCOME_CATEGORIES
-))
-
-# =========================
-# カラー固定
-# =========================
 CATEGORY_COLORS = {
     "外食費": "#FF9999",
     "食材費": "#FF9900",
@@ -70,34 +57,27 @@ if not os.path.exists(DATA_FILE):
     pd.DataFrame(columns=COLS).to_csv(DATA_FILE, index=False)
 
 # =========================
-# 読み込み
+# データ読み込み（安全版）
 # =========================
-df = pd.read_csv(DATA_FILE)
-df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
+def load_data():
+    df = pd.read_csv(DATA_FILE)
 
-for c in COLS:
-    if c not in df.columns:
-        df[c] = None
+    if df.empty:
+        return df
 
-# ID再生成（重複防止）
-df = df.reset_index(drop=True)
-df["id"] = df.index
+    # idを安全に整数化
+    if "id" not in df.columns:
+        df["id"] = range(len(df))
+    else:
+        df["id"] = pd.to_numeric(df["id"], errors="coerce").fillna(0).astype(int)
 
-# 型整形
-df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
-df = df.dropna(subset=["日付"])
-df["金額"] = pd.to_numeric(df["金額"], errors="coerce").fillna(0)
+    df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
+    df = df.dropna(subset=["日付"])
+    df["金額"] = pd.to_numeric(df["金額"], errors="coerce").fillna(0)
 
-df["カテゴリ"] = df["カテゴリ"].astype(str).str.strip()
-df.loc[~df["カテゴリ"].isin(ALL_CATEGORY_ORDER), "カテゴリ"] = "その他支出"
+    return df
 
-df["カテゴリ"] = pd.Categorical(
-    df["カテゴリ"],
-    categories=ALL_CATEGORY_ORDER,
-    ordered=True
-)
-
-df.to_csv(DATA_FILE, index=False)
+df = load_data()
 
 # =========================
 # タイトル
@@ -105,116 +85,118 @@ df.to_csv(DATA_FILE, index=False)
 st.title("💰 家計簿アプリ")
 
 # =========================
-# 残高表示
+# 残高
 # =========================
 income_total = df[df["タイプ"] == "収入"]["金額"].sum()
 expense_total = df[df["タイプ"] == "支出"]["金額"].sum()
-balance = income_total - expense_total
 
-st.metric("現在の残高", f"{balance:,.0f} 円")
-st.write(f"収入合計：{income_total:,.0f} 円")
-st.write(f"支出合計：{expense_total:,.0f} 円")
+st.metric("残高", f"{income_total - expense_total:,.0f} 円")
+st.write(f"収入：{income_total:,.0f} 円")
+st.write(f"支出：{expense_total:,.0f} 円")
 
 st.divider()
 
 # =========================
 # データ追加
 # =========================
-st.header("データ追加")
+st.header("➕ データ追加")
 
-if "ttype" not in st.session_state:
-    st.session_state.ttype = "支出"
+if "type_radio" not in st.session_state:
+    st.session_state.type_radio = "支出"
 
-def change_type():
-    st.session_state.ttype = st.session_state.type_radio
+st.radio("タイプ", ["支出", "収入"], key="type_radio")
 
-st.radio("タイプ", ["支出", "収入"], key="type_radio", on_change=change_type)
+category_list = EXPENSE_CATEGORIES if st.session_state.type_radio == "支出" else INCOME_CATEGORIES
 
-category_list = EXPENSE_CATEGORIES if st.session_state.ttype == "支出" else INCOME_CATEGORIES
-
-with st.form("add_form"):
+with st.form("form"):
     d = st.date_input("日付", value=date.today())
     item = st.text_input("項目")
     amount = st.number_input("金額", min_value=0)
     category = st.selectbox("カテゴリ", category_list)
-    submitted = st.form_submit_button("追加")
 
-    if submitted:
-        new_id = df["id"].max() + 1 if not df.empty else 0
+    if st.form_submit_button("追加"):
+
+        # 🔥 最新CSVを再読み込み
+        latest_df = load_data()
+
+        if latest_df.empty:
+            new_id = 0
+        else:
+            new_id = latest_df["id"].max() + 1
+
         new_row = pd.DataFrame(
-            [[new_id, pd.to_datetime(d), item, amount, category, st.session_state.ttype]],
+            [[new_id, d, item, amount, category, st.session_state.type_radio]],
             columns=COLS
         )
-        df = pd.concat([df, new_row], ignore_index=True)
-        df.to_csv(DATA_FILE, index=False)
+
+        latest_df = pd.concat([latest_df, new_row], ignore_index=True)
+        latest_df.to_csv(DATA_FILE, index=False)
+
         st.rerun()
 
+st.divider()
+
 # =========================
-# 月別集計（年タブ）
+# 月別集計
 # =========================
 st.header("📊 月別集計")
 
 if not df.empty:
-
     df["年"] = df["日付"].dt.year
     df["月"] = df["日付"].dt.month
 
     years = sorted(df["年"].unique(), reverse=True)
     tabs = st.tabs([f"{y}年" for y in years])
 
-    for tab, year in zip(tabs, years):
+    for tab, y in zip(tabs, years):
         with tab:
-            year_df = df[df["年"] == year]
+            ydf = df[df["年"] == y]
 
-            month_summary = (
-                year_df
-                .pivot_table(
-                    index="月",
-                    columns="タイプ",
-                    values="金額",
-                    aggfunc="sum",
-                    fill_value=0
-                )
-                .sort_index()
+            summary = ydf.pivot_table(
+                index="月",
+                columns="タイプ",
+                values="金額",
+                aggfunc="sum",
+                fill_value=0
             )
 
-            st.dataframe(month_summary)
+            st.dataframe(summary)
 
-            if "収入" in month_summary.columns:
-                st.subheader("収入（月別）")
-                st.bar_chart(month_summary["収入"])
+            if "収入" in summary:
+                st.bar_chart(summary["収入"])
 
-            if "支出" in month_summary.columns:
-                st.subheader("支出（月別）")
-                st.bar_chart(month_summary["支出"])
+            if "支出" in summary:
+                st.bar_chart(summary["支出"])
 
 st.divider()
 
 # =========================
-# 月別支出円グラフ
+# 円グラフ
 # =========================
-st.header("🥧 支出カテゴリ内訳（月別）")
+st.header("🥧 支出内訳")
 
-expense_df = df[df["タイプ"] == "支出"].copy()
+exp = df[df["タイプ"] == "支出"].copy()
 
-if not expense_df.empty:
-    expense_df["年月"] = expense_df["日付"].dt.to_period("M").astype(str)
-    month_list = sorted(expense_df["年月"].unique(), reverse=True)
-    selected_month = st.selectbox("表示する月", month_list)
+if not exp.empty:
+    exp["年月"] = exp["日付"].dt.to_period("M").astype(str)
+    months = sorted(exp["年月"].unique(), reverse=True)
+    m = st.selectbox("月選択", months)
 
-    month_data = expense_df[expense_df["年月"] == selected_month]
+    mdf = exp[exp["年月"] == m]
+    pie = mdf.groupby("カテゴリ")["金額"].sum().reindex(EXPENSE_CATEGORIES).fillna(0)
 
-    pie_data = (
-        month_data.groupby("カテゴリ", observed=False)["金額"]
-        .sum()
-        .reindex(EXPENSE_CATEGORIES)
-        .fillna(0)
-    )
-
-    colors = [CATEGORY_COLORS.get(cat, "#D3D3D3") for cat in pie_data.index]
+    colors = [CATEGORY_COLORS[c] for c in pie.index]
 
     fig, ax = plt.subplots()
-    ax.pie(pie_data, labels=pie_data.index, autopct="%1.1f%%", startangle=90, colors=colors)
+
+    ax.pie(
+        pie,
+        labels=pie.index,
+        autopct="%1.1f%%",
+        colors=colors,
+        textprops={"fontproperties": font_prop} if font_prop else {}
+    )
+
     ax.axis("equal")
     st.pyplot(fig)
 
@@ -233,27 +215,31 @@ if not df.empty:
     years = sorted(df["年"].unique(), reverse=True)
     year_tabs = st.tabs([f"{y}年" for y in years])
 
-    for ytab, year in zip(year_tabs, years):
+    for ytab, y in zip(year_tabs, years):
         with ytab:
 
-            year_df = df[df["年"] == year]
-            months = sorted(year_df["月"].unique())
-            month_tabs = st.tabs([f"{m}月" for m in months])
+            ydf = df[df["年"] == y]
+            months = sorted(ydf["月"].unique())
+            mtabs = st.tabs([f"{m}月" for m in months])
 
-            for mtab, month in zip(month_tabs, months):
+            for mtab, m in zip(mtabs, months):
                 with mtab:
 
-                    month_df = year_df[year_df["月"] == month].sort_values("日付")
+                    mdf = ydf[ydf["月"] == m].sort_values("日付")
 
-                    for i, row in month_df.iterrows():
-                        cols = st.columns([2,2,2,2,2,1])
-                        cols[0].write(row["日付"].strftime("%m月%d日"))
-                        cols[1].write(row["項目"])
-                        cols[2].write(f"¥{row['金額']:,}")
-                        cols[3].write(row["タイプ"])
-                        cols[4].write(row["カテゴリ"])
+                    for _, row in mdf.iterrows():
 
-                        if cols[5].button("削除", key=f"del_{year}_{month}_{i}"):
-                            df = df[df["id"] != row["id"]]
-                            df.to_csv(DATA_FILE, index=False)
-                            st.rerun()
+                        with st.container():
+                            st.markdown(f"### {row['項目']}")
+                            st.write(f"📅 {row['日付'].strftime('%m月%d日')}")
+                            st.write(f"💰 ¥{row['金額']:,}")
+                            st.write(f"📂 {row['カテゴリ']} / {row['タイプ']}")
+
+                            c1, c2 = st.columns(2)
+
+                            if c2.button("削除", key=f"del_{row['id']}"):
+                                new_df = df[df["id"] != row["id"]]
+                                new_df.to_csv(DATA_FILE, index=False)
+                                st.rerun()
+
+                        st.divider()
