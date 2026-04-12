@@ -5,23 +5,25 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib
 import matplotlib.font_manager as fm
+from matplotlib import font_manager
 
 # =========================
 # 日本語フォント
 # =========================
-font_candidates = [
-    "C:/Windows/Fonts/msgothic.ttc",
-    "C:/Windows/Fonts/meiryo.ttc",
-    "/usr/share/fonts/truetype/ipafont-gothic/ipag.ttf",
-    "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc"
-]
+font_path = "NotoSansJP-Regular.ttf"
 
-for font in font_candidates:
-    if os.path.exists(font):
-        matplotlib.rcParams["font.family"] = fm.FontProperties(fname=font).get_name()
-        break
+font_prop = None
 
-matplotlib.rcParams["axes.unicode_minus"] = False
+if os.path.exists(font_path):
+    font_prop = fm.FontProperties(fname=font_path)
+    matplotlib.rcParams["font.family"] = font_prop.get_name()
+    plt.rcParams["font.family"] = font_prop.get_name()
+else:
+    st.warning("⚠ 日本語フォントが見つかりません（□になる原因）")
+
+matplotlib.rcParams['font.family'] = 'sans-serif'
+matplotlib.rcParams['font.sans-serif'] = [font_prop.get_name()] if font_prop else []
+
 
 # =========================
 # ファイル設定
