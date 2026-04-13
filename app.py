@@ -199,22 +199,90 @@ if not exp.empty:
 st.divider()
 
 # =========================
-# データ削除
+# データ管理（年・月タブ＋編集）
 # =========================
 st.header("🗂 データ管理")
 
 if not df.empty:
-    for _, row in df.sort_values("日付").iterrows():
 
-        with st.container():
-            st.markdown(f"### {row['項目']}")
-            st.write(f"📅 {row['日付'].strftime('%m月%d日')}")
-            st.write(f"💰 ¥{row['金額']:,}")
-            st.write(f"📂 {row['カテゴリ']} / {row['タイプ']}")
+    df["年"] = df["日付"].dt.year
+    df["月"] = df["日付"].dt.month
 
-            if st.button("削除", key=f"del_{row['id']}"):
-                supabase.table("kakeibo").delete().eq("id", row["id"]).execute()
-                st.cache_data.clear()
-                st.rerun()
+    years = sorted(df["年"].unique(), reverse=True)
+    year_tabs = st.tabs([f"{y}年" for y in years])
 
-        st.divider()
+    for ytab, y in zip(year_tabs, years):
+        with ytab:
+
+            ydf = df[df["年"] == y]
+            months = sorted(ydf["月"].unique())
+            mtabs = st.tabs([f"{m}月" for m in months])
+
+            for mtab, m in zip(mtabs, months):
+                with mtab:
+
+                    mdf = ydf[ydf["月"] == m].sort_values("日付")
+
+                    for _, row in mdf.iterrows():
+
+                        st.markdown(f"### {row['項目']}")
+                        st.write(f"📅 {row['日付'].strftime('%m月%d日')}")
+                        st.write(f"💰 ¥{row['金額']:,}")
+                        st.write(f"📂 {row['カテゴリ']} / {row['タイプ']}")
+
+                        col1, col2 = st.columns(2)
+
+                        # 削除
+                        if col1.button("削除", key=f"del_{row['id']}"):
+                            supabase.table("kakeibo").delete().eq("id", row["id"]).execute()
+                            st.cache_data.clear()
+                            st.rerun()
+
+                        # 編集ボタン
+                        if col2.button("編集", key=f"edit_{row['id']}"):
+                            st.session_state["edit_id"] = row["id"]
+
+                        st.divider()
+
+# =========================
+# 編集フォーム
+# =========================
+if "edit_id" in st.session_state:
+
+    edit_id = st.session_state["edit_id"]
+    edit_row = df[df["id"] == edit_id].iloc[0]
+
+    st.subheader("✏️ データ編集")
+
+    new_date = st.date_input("日付", edit_row["日付"])
+    new_item = st.text_input("項目", edit_row["項目"])
+    new_amount = st.number_input("金額", value=int(edit_row["金額"]))
+
+    # カテゴリはタイプに応じて切り替え
+    if edit_row["タイプ"] == "支出":
+        category_list = EXPENSE_CATEGORIES
+    else:
+        category_list = INCOME_CATEGORIES
+
+    new_category = st.selectbox("カテゴリ", category_list, index=category_list.index(edit_row["カテゴリ"]))
+    new_type = st.selectbox("タイプ", ["支出", "収入"], index=0 if edit_row["タイプ"]=="支出" else 1)
+
+    col1, col2 = st.columns(2)
+
+    if col1.button("更新"):
+        supabase.table("kakeibo").update({
+            "日付": str(new_date),
+            "項目": new_item,
+            "金額": int(new_amount),
+            "カテゴリ": new_category,
+            "タイプ": new_type
+        }).eq("id", edit_id).execute()
+
+        st.success("更新しました！")
+        del st.session_state["edit_id"]
+        st.cache_data.clear()
+        st.rerun()
+
+    if col2.button("キャンセル"):
+        del st.session_state["edit_id"]
+        st.rerun()
