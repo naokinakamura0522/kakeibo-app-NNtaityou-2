@@ -252,7 +252,13 @@ st.header("🗂 データ管理")
 
 # フィルタ
 selected_type = st.selectbox("タイプで絞る", ["すべて", "支出", "収入"])
-ydf = df[df["年"] == y]
+
+filtered_df = df.copy()
+
+if selected_type != "すべて":
+    filtered_df = filtered_df[filtered_df["タイプ"] == selected_type]
+
+ydf = filtered_df[filtered_df["年"] == y]
 
 # フィルタ適用
 if selected_type != "すべて":
