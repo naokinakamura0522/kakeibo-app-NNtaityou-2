@@ -258,12 +258,13 @@ filtered_df = df.copy()
 if selected_type != "すべて":
     filtered_df = filtered_df[filtered_df["タイプ"] == selected_type]
 
-ydf = filtered_df[filtered_df["年"] == y]
+
 
 if not df.empty and "edit_id" not in st.session_state:
 
-    df["年"] = df["日付"].dt.year
-    df["月"] = df["日付"].dt.month
+    # 年・月生成（filtered_dfに対してやる）
+    filtered_df["年"] = filtered_df["日付"].dt.year
+    filtered_df["月"] = filtered_df["日付"].dt.month
 
     years = sorted(filtered_df["年"].unique(), reverse=True)
     year_tabs = st.tabs([f"{y}年" for y in years])
@@ -271,14 +272,14 @@ if not df.empty and "edit_id" not in st.session_state:
     for ytab, y in zip(year_tabs, years):
         with ytab:
 
-            ydf = df[df["年"] == y]
+            ydf = filtered_df[filtered_df["年"] == y]
             months = sorted(ydf["月"].unique())
             mtabs = st.tabs([f"{m}月" for m in months])
 
             for mtab, m in zip(mtabs, months):
                 with mtab:
 
-                    mdf = ydf[ydf["月"] == m].sort_values("日付")
+                    mdf = ydf = filtered_df[filtered_df["年"] == y] == m].sort_values("日付")
 
                     for _, row in mdf.iterrows():
 
