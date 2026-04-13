@@ -279,7 +279,8 @@ if not df.empty and "edit_id" not in st.session_state:
             for mtab, m in zip(mtabs, months):
                 with mtab:
 
-                    mdf = ydf = filtered_df[filtered_df["年"] == y] == m].sort_values("日付")
+                    ydf = filtered_df[filtered_df["年"] == y]
+                    mdf = ydf[ydf["月"] == m].sort_values("日付")
 
                     for _, row in mdf.iterrows():
 
