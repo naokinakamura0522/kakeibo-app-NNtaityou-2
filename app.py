@@ -252,6 +252,9 @@ st.header("🗂 データ管理")
 
 # フィルタ
 selected_type = st.selectbox("タイプで絞る", ["すべて", "支出", "収入"])
+ydf = df[df["年"] == y]
+
+# フィルタ適用
 if selected_type != "すべて":
     ydf = ydf[ydf["タイプ"] == selected_type]
 
@@ -301,19 +304,7 @@ if not df.empty and "edit_id" not in st.session_state:
                             if col2.button("編集", key=f"edit_{row['id']}"):
                                 st.session_state["edit_id"] = row["id"]
 
-                        col1, col2 = st.columns(2)
 
-                        # 削除
-                        if col1.button("削除", key=f"del_{row['id']}"):
-                            supabase.table("kakeibo").delete().eq("id", row["id"]).execute()
-                            st.cache_data.clear()
-                            st.rerun()
-
-                        # 編集ボタン
-                        if col2.button("編集", key=f"edit_{row['id']}"):
-                            st.session_state["edit_id"] = row["id"]
-
-                        st.divider()
 
 # =========================
 # 編集モード切り替え
