@@ -58,6 +58,9 @@ def load_data():
     res = supabase.table("kakeibo").select("*").execute()
     df = pd.DataFrame(res.data)
 
+    if df.empty:
+        df = pd.DataFrame(columns=["id", "日付", "項目", "金額", "カテゴリ", "タイプ"])
+
     if not df.empty:
         df["日付"] = pd.to_datetime(df["日付"])
         df["金額"] = pd.to_numeric(df["金額"])
@@ -160,7 +163,11 @@ st.divider()
 # =========================
 st.header("🥧 支出内訳")
 
-exp = df[df["タイプ"] == "支出"].copy()
+if df.empty or "タイプ" not in df.columns:
+    st.info("データがまだありません")
+    exp = pd.DataFrame()
+else:
+    exp = df[df["タイプ"] == "支出"].copy()
 
 if not exp.empty:
     exp["年月"] = exp["日付"].dt.to_period("M").astype(str)
