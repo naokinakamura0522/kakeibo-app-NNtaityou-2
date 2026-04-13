@@ -1,34 +1,34 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
-import os
+from supabase import create_client
 import matplotlib.pyplot as plt
-import matplotlib
 import matplotlib.font_manager as fm
+import matplotlib
+
+# =========================
+# Supabase接続
+# =========================
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
+supabase = create_client(url, key)
 
 # =========================
 # 日本語フォント
 # =========================
 font_path = "NotoSansJP-Regular.ttf"
-
 font_prop = None
-if os.path.exists(font_path):
+
+try:
     font_prop = fm.FontProperties(fname=font_path)
     matplotlib.rcParams["font.family"] = font_prop.get_name()
-    plt.rcParams["font.family"] = font_prop.get_name()
-else:
-    st.warning("⚠ 日本語フォントが見つかりません")
+except:
+    pass
 
 # =========================
 # ページ設定
 # =========================
 st.set_page_config(page_title="家計簿アプリ", layout="centered")
-
-# =========================
-# ファイル設定
-# =========================
-DATA_FILE = "kakeibo.csv"
-COLS = ["id", "日付", "項目", "金額", "カテゴリ", "タイプ"]
 
 # =========================
 # カテゴリ
@@ -51,29 +51,16 @@ CATEGORY_COLORS = {
 }
 
 # =========================
-# CSV初期化
+# データ取得
 # =========================
-if not os.path.exists(DATA_FILE):
-    pd.DataFrame(columns=COLS).to_csv(DATA_FILE, index=False)
-
-# =========================
-# データ読み込み（安全版）
-# =========================
+@st.cache_data(ttl=5)
 def load_data():
-    df = pd.read_csv(DATA_FILE)
+    res = supabase.table("kakeibo").select("*").execute()
+    df = pd.DataFrame(res.data)
 
-    if df.empty:
-        return df
-
-    # idを安全に整数化
-    if "id" not in df.columns:
-        df["id"] = range(len(df))
-    else:
-        df["id"] = pd.to_numeric(df["id"], errors="coerce").fillna(0).astype(int)
-
-    df["日付"] = pd.to_datetime(df["日付"], errors="coerce")
-    df = df.dropna(subset=["日付"])
-    df["金額"] = pd.to_numeric(df["金額"], errors="coerce").fillna(0)
+    if not df.empty:
+        df["日付"] = pd.to_datetime(df["日付"])
+        df["金額"] = pd.to_numeric(df["金額"])
 
     return df
 
@@ -87,8 +74,12 @@ st.title("💰 家計簿アプリ")
 # =========================
 # 残高
 # =========================
-income_total = df[df["タイプ"] == "収入"]["金額"].sum()
-expense_total = df[df["タイプ"] == "支出"]["金額"].sum()
+if not df.empty:
+    income_total = df[df["タイプ"] == "収入"]["金額"].sum()
+    expense_total = df[df["タイプ"] == "支出"]["金額"].sum()
+else:
+    income_total = 0
+    expense_total = 0
 
 st.metric("残高", f"{income_total - expense_total:,.0f} 円")
 st.write(f"収入：{income_total:,.0f} 円")
@@ -116,22 +107,16 @@ with st.form("form"):
 
     if st.form_submit_button("追加"):
 
-        # 🔥 最新CSVを再読み込み
-        latest_df = load_data()
+        supabase.table("kakeibo").insert({
+            "日付": str(d),
+            "項目": item,
+            "金額": int(amount),
+            "カテゴリ": category,
+            "タイプ": st.session_state.type_radio
+        }).execute()
 
-        if latest_df.empty:
-            new_id = 0
-        else:
-            new_id = latest_df["id"].max() + 1
-
-        new_row = pd.DataFrame(
-            [[new_id, d, item, amount, category, st.session_state.type_radio]],
-            columns=COLS
-        )
-
-        latest_df = pd.concat([latest_df, new_row], ignore_index=True)
-        latest_df.to_csv(DATA_FILE, index=False)
-
+        st.success("追加しました！")
+        st.cache_data.clear()
         st.rerun()
 
 st.divider()
@@ -203,43 +188,22 @@ if not exp.empty:
 st.divider()
 
 # =========================
-# データ管理
+# データ削除
 # =========================
 st.header("🗂 データ管理")
 
 if not df.empty:
+    for _, row in df.sort_values("日付").iterrows():
 
-    df["年"] = df["日付"].dt.year
-    df["月"] = df["日付"].dt.month
+        with st.container():
+            st.markdown(f"### {row['項目']}")
+            st.write(f"📅 {row['日付'].strftime('%m月%d日')}")
+            st.write(f"💰 ¥{row['金額']:,}")
+            st.write(f"📂 {row['カテゴリ']} / {row['タイプ']}")
 
-    years = sorted(df["年"].unique(), reverse=True)
-    year_tabs = st.tabs([f"{y}年" for y in years])
+            if st.button("削除", key=f"del_{row['id']}"):
+                supabase.table("kakeibo").delete().eq("id", row["id"]).execute()
+                st.cache_data.clear()
+                st.rerun()
 
-    for ytab, y in zip(year_tabs, years):
-        with ytab:
-
-            ydf = df[df["年"] == y]
-            months = sorted(ydf["月"].unique())
-            mtabs = st.tabs([f"{m}月" for m in months])
-
-            for mtab, m in zip(mtabs, months):
-                with mtab:
-
-                    mdf = ydf[ydf["月"] == m].sort_values("日付")
-
-                    for _, row in mdf.iterrows():
-
-                        with st.container():
-                            st.markdown(f"### {row['項目']}")
-                            st.write(f"📅 {row['日付'].strftime('%m月%d日')}")
-                            st.write(f"💰 ¥{row['金額']:,}")
-                            st.write(f"📂 {row['カテゴリ']} / {row['タイプ']}")
-
-                            c1, c2 = st.columns(2)
-
-                            if c2.button("削除", key=f"del_{row['id']}"):
-                                new_df = df[df["id"] != row["id"]]
-                                new_df.to_csv(DATA_FILE, index=False)
-                                st.rerun()
-
-                        st.divider()
+        st.divider()
