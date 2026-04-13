@@ -260,16 +260,12 @@ if selected_type != "すべて":
 
 ydf = filtered_df[filtered_df["年"] == y]
 
-# フィルタ適用
-if selected_type != "すべて":
-    ydf = ydf[ydf["タイプ"] == selected_type]
-
 if not df.empty and "edit_id" not in st.session_state:
 
     df["年"] = df["日付"].dt.year
     df["月"] = df["日付"].dt.month
 
-    years = sorted(df["年"].unique(), reverse=True)
+    years = sorted(filtered_df["年"].unique(), reverse=True)
     year_tabs = st.tabs([f"{y}年" for y in years])
 
     for ytab, y in zip(year_tabs, years):
