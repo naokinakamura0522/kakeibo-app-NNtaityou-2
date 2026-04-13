@@ -172,18 +172,22 @@ if not exp.empty:
 
     colors = [CATEGORY_COLORS[c] for c in pie.index]
 
-    fig, ax = plt.subplots()
-
-    ax.pie(
-        pie,
-        labels=pie.index,
-        autopct="%1.1f%%",
-        colors=colors,
-        textprops={"fontproperties": font_prop} if font_prop else {}
-    )
-
-    ax.axis("equal")
-    st.pyplot(fig)
+    # 👇 追加（これが重要）
+    if pie.sum() == 0:
+        st.info("この月の支出データがありません")
+    else:
+        fig, ax = plt.subplots()
+    
+        ax.pie(
+            pie,
+            labels=pie.index,
+            autopct="%1.1f%%",
+            colors=colors,
+            textprops={"fontproperties": font_prop} if font_prop else {}
+        )
+    
+        ax.axis("equal")
+        st.pyplot(fig)
 
 st.divider()
 
