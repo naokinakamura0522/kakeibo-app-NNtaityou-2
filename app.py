@@ -75,18 +75,65 @@ df = load_data()
 st.title("💰 家計簿アプリ")
 
 # =========================
-# 残高
+# 残高（タブ化）
 # =========================
-if not df.empty:
-    income_total = df[df["タイプ"] == "収入"]["金額"].sum()
-    expense_total = df[df["タイプ"] == "支出"]["金額"].sum()
-else:
-    income_total = 0
-    expense_total = 0
+st.header("💰 残高")
 
-st.metric("残高", f"{income_total - expense_total:,.0f} 円")
-st.write(f"収入：{income_total:,.0f} 円")
-st.write(f"支出：{expense_total:,.0f} 円")
+if df.empty:
+    st.info("データがまだありません")
+else:
+    df["年"] = df["日付"].dt.year
+    df["月"] = df["日付"].dt.month
+
+    tabs = st.tabs(["合計", "年別", "月別"])
+
+    # =========================
+    # 合計
+    # =========================
+    with tabs[0]:
+        income_total = df[df["タイプ"] == "収入"]["金額"].sum()
+        expense_total = df[df["タイプ"] == "支出"]["金額"].sum()
+
+        st.metric("残高", f"{income_total - expense_total:,.0f} 円")
+        st.write(f"収入：{income_total:,.0f} 円")
+        st.write(f"支出：{expense_total:,.0f} 円")
+
+    # =========================
+    # 年別
+    # =========================
+    with tabs[1]:
+        years = sorted(df["年"].unique(), reverse=True)
+
+        for y in years:
+            ydf = df[df["年"] == y]
+
+            income = ydf[ydf["タイプ"] == "収入"]["金額"].sum()
+            expense = ydf[ydf["タイプ"] == "支出"]["金額"].sum()
+
+            st.subheader(f"{y}年")
+            st.metric("残高", f"{income - expense:,.0f} 円")
+            st.write(f"収入：{income:,.0f} 円 / 支出：{expense:,.0f} 円")
+            st.divider()
+
+    # =========================
+    # 月別
+    # =========================
+    with tabs[2]:
+        df["年月"] = df["日付"].dt.to_period("M").astype(str)
+        months = sorted(df["年月"].unique(), reverse=True)
+    
+        month_tabs = st.tabs(months)
+    
+        for mtab, m in zip(month_tabs, months):
+            with mtab:
+                mdf = df[df["年月"] == m]
+    
+                income = mdf[mdf["タイプ"] == "収入"]["金額"].sum()
+                expense = mdf[mdf["タイプ"] == "支出"]["金額"].sum()
+    
+                st.metric("残高", f"{income - expense:,.0f} 円")
+                st.write(f"収入：{income:,.0f} 円")
+                st.write(f"支出：{expense:,.0f} 円")
 
 st.divider()
 
