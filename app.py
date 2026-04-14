@@ -149,7 +149,7 @@ st.radio("タイプ", ["支出", "収入"], key="type_radio")
 
 category_list = EXPENSE_CATEGORIES if st.session_state.type_radio == "支出" else INCOME_CATEGORIES
 
-with st.form("form"):
+with st.form("form", clear_on_submit=True):
     d = st.date_input("日付", value=date.today())
     item = st.text_input("項目")
     amount = st.number_input("金額", min_value=0)
