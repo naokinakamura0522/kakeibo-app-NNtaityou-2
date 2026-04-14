@@ -222,14 +222,15 @@ if not exp.empty:
     m = st.selectbox("月選択", months)
 
     mdf = exp[exp["年月"] == m]
-    pie = mdf.groupby("カテゴリ")["金額"].sum().reindex(EXPENSE_CATEGORIES).fillna(0)
-
-    colors = [CATEGORY_COLORS[c] for c in pie.index]
-
-    # 👇 追加（これが重要）
-    if pie.sum() == 0:
+    
+    pie = mdf.groupby("カテゴリ")["金額"].sum()
+    pie = pie[pie > 0]
+    
+    if pie.empty:
         st.info("この月の支出データがありません")
     else:
+        colors = [CATEGORY_COLORS[c] for c in pie.index]
+    
         fig, ax = plt.subplots()
     
         ax.pie(
@@ -242,7 +243,6 @@ if not exp.empty:
     
         ax.axis("equal")
         st.pyplot(fig)
-
 st.divider()
 
 # =========================
